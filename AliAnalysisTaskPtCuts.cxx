@@ -1,0 +1,525 @@
+#include <iostream>
+
+#include "TChain.h"
+#include "TTree.h"
+#include "TH1F.h"
+#include "TCanvas.h"
+#include "TMath.h"
+
+#include "AliAnalysisTask.h"
+#include "AliAnalysisManager.h"
+
+#include "AliAODEvent.h"
+#include "AliAODTrack.h"
+#include "AliAODInputHandler.h"
+
+#include "AliAODCluster.h"
+#include "AliAODCaloCluster.h"
+#include "AliAnalysisTaskPtCuts.h"
+
+#include "AliCentrality.h"
+// example of an analysis task creating a p_t spectrum
+// Authors: Panos Cristakoglou, Jan Fiete Grosse-Oetringhaus, Christian Klein-Boesing
+
+using namespace std;
+
+ClassImp(AliAnalysisTaskPtCuts)
+
+//________________________________________________________________________
+AliAnalysisTaskPtCuts::AliAnalysisTaskPtCuts(const char *name) 
+  : AliAnalysisTask(name, ""), fAOD(0), fHistList(0)
+{
+  // Constructor
+
+  // Define input and output slots here
+  // Input slot #0 works with a TChain
+  DefineInput(0, TChain::Class());
+  // Output slot #0 writes into a TList container
+  DefineOutput(0, TList::Class());
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskPtCuts::ConnectInputData(Option_t *) 
+{
+  // Connect AOD or AOD here
+  // Called once
+
+  TTree* tree = dynamic_cast<TTree*> (GetInputData(0));
+  if (!tree) {
+    Printf("ERROR: Could not read chain from input slot 0");
+  } else {
+    // Disable all branches and enable only the needed ones
+    // The next two lines are different when data produced as AliAODEvent is read
+    /*
+    tree->SetBranchStatus("*", kFALSE);
+    tree->SetBranchStatus("fTracks.*", kTRUE);
+    */
+
+    AliAODInputHandler *esdH = dynamic_cast<AliAODInputHandler*> (AliAnalysisManager::GetAnalysisManager()->GetInputEventHandler());
+
+    if (!esdH) {
+      Printf("ERROR: Could not get AODInputHandler");
+    } else
+      fAOD = esdH->GetEvent();
+  }
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskPtCuts::CreateOutputObjects()
+{
+  // Create histograms
+  // Called once
+  //1D Histograms
+  fHistCent = new TH1F("fHistCent", "Centrality distribution", 102, -1.5, 100.5);
+  fHistCent->GetXaxis()->SetTitle("c");
+  fHistCent->GetYaxis()->SetTitle("dN/c");
+  fHistCent->SetMarkerStyle(kFullCircle);
+
+  fHistPt = new TH1F("fHistPt", "P_{T} distribution", 120, -0.5, 119.5);
+  fHistPt->GetXaxis()->SetTitle("P_{T} (GeV/c)");
+  fHistPt->GetYaxis()->SetTitle("dN/dP_{T} (c/GeV)");
+  fHistPt->SetMarkerStyle(kFullCircle);
+
+  fHistPt2 = new TH1F("fHistPt2", "P_{T} distribution 5 GeV cut", 120, -0.5, 119.5);
+  fHistPt2->GetXaxis()->SetTitle("P_{T} (GeV/c)");
+  fHistPt2->GetYaxis()->SetTitle("dN/dP_{T} (c/GeV)");
+  fHistPt2->SetMarkerStyle(kFullCircle);
+
+  fHistE = new TH1F("fHistE", "Energy distribution", 100, -0.5, 99.5);
+  fHistE->GetXaxis()->SetTitle("E (GeV/)");
+  fHistE->GetYaxis()->SetTitle("dN/dE (GeV)");
+  fHistE->SetMarkerStyle(kFullSquare);
+
+  fHistE2 = new TH1F("fHistE2", "Energy distribution 5 GeV cut", 100, -0.5, 99.5);
+  fHistE2->GetXaxis()->SetTitle("E (GeV/)");
+  fHistE2->GetYaxis()->SetTitle("dN/dE (GeV)");
+  fHistE2->SetMarkerStyle(kFullSquare);
+  
+  fHistPhi = new TH1F("fHistPhi", "Phi distribution", 70, -0.5, 6.5);
+  fHistPhi->GetXaxis()->SetTitle("Phi");
+  fHistPhi->GetYaxis()->SetTitle("dN/dPhi");
+  fHistPhi->SetMarkerStyle(kFullSquare);
+
+  fHistPhi2 = new TH1F("fHistPhi2", "Phi distribution 5 GeV cut", 70, -0.5, 6.5);
+  fHistPhi2->GetXaxis()->SetTitle("Phi");
+  fHistPhi2->GetYaxis()->SetTitle("dN/dPhi");
+  fHistPhi2->SetMarkerStyle(kFullSquare);
+
+  fHistEta = new TH1F("fHistEta", "Eta distribution", 20, -1.0, 1.0);
+  fHistEta->GetXaxis()->SetTitle("Eta");
+  fHistEta->GetYaxis()->SetTitle("dN/dEta");
+  fHistEta->SetMarkerStyle(kFullSquare);
+
+  fHistEta2 = new TH1F("fHistEta2", "Eta distribution 5 GeV cut", 20, -1.0, 1.0);
+  fHistEta2->GetXaxis()->SetTitle("Eta");
+  fHistEta2->GetYaxis()->SetTitle("dN/dEta");
+  fHistEta2->SetMarkerStyle(kFullSquare);
+
+  //2D Histograms
+  //fHistDelPt = new TH2F("fHistDelPt", "Delta Pt Eta distribution", 120,-0.5, 119.5, 20, -0.05,1.95 );
+  //fHistDelPt->GetXaxis()->SetTitle("Del Pt");
+  //fHistDelPt->GetYaxis()->SetTitle("Del Eta");
+
+  fHistDelE = new TH2F("fHistDelE", "Delta E Eta distribution", 100,-0.05, 9.95, 20, -1.0,1.0);
+  fHistDelE->GetXaxis()->SetTitle("Del E");
+  fHistDelE->GetYaxis()->SetTitle("Del Eta");
+
+  fHistDelPhi = new TH2F("fHistDelPhi", "Delta Phi Eta distribution", 34,-0.05, 3.35, 20, -1.0, 1.0 );
+  fHistDelPhi->GetXaxis()->SetTitle("Del Phi");
+  fHistDelPhi->GetYaxis()->SetTitle("Del Eta");
+
+  //Centrality cuts
+  fHistDelE_10 = new TH2F("fHistDelE_10", "Delta E Eta distribution at 0-10% centrality", 100,-0.05, 9.95, 20, -1.0,1.0);
+  fHistDelE_10->GetXaxis()->SetTitle("Del E");
+  fHistDelE_10->GetYaxis()->SetTitle("Del Eta");
+
+  fHistDelPhi_10 = new TH2F("fHistDelPhi_10", "Delta Phi Eta distribution at 0-10% centrality", 34,-0.05, 3.35, 20, -1.0, 1.0 );
+  fHistDelPhi_10->GetXaxis()->SetTitle("Del Phi");
+  fHistDelPhi_10->GetYaxis()->SetTitle("Del Eta");
+
+  fHistDelE_40 = new TH2F("fHistDelE_40", "Delta E Eta distribution at 20-40% centrality", 100,-0.05, 9.95, 20, -1.0,1.0);
+  fHistDelE_40->GetXaxis()->SetTitle("Del E");
+  fHistDelE_40->GetYaxis()->SetTitle("Del Eta");
+
+  fHistDelPhi_40 = new TH2F("fHistDelPhi_40", "Delta Phi Eta distribution at 20-40% centrality", 34,-0.05, 3.35, 20, -1.0, 1.0 );
+  fHistDelPhi_40->GetXaxis()->SetTitle("Del Phi");
+  fHistDelPhi_40->GetYaxis()->SetTitle("Del Eta");
+
+  //TList
+  fHistList = new TList();
+  
+  //Adding to the histogram list
+  //The TH1Fs
+  fHistList->Add(fHistCent);
+  fHistList->Add(fHistPt);
+  fHistList->Add(fHistPt2);
+  fHistList->Add(fHistE);
+  fHistList->Add(fHistE2);
+  fHistList->Add(fHistPhi);
+  fHistList->Add(fHistPhi2);
+  fHistList->Add(fHistEta);
+  fHistList->Add(fHistEta2);
+
+
+  //The TH2fs (correlations with eta)
+  //fHistList->Add(fHistDelPt);
+  fHistList->Add(fHistDelE);
+  fHistList->Add(fHistDelPhi);
+  fHistList->Add(fHistDelE_10);
+  fHistList->Add(fHistDelPhi_10);
+  fHistList->Add(fHistDelE_40);
+  fHistList->Add(fHistDelPhi_40);
+  
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskPtCuts::Exec(Option_t *) 
+{
+  // Main loop
+  // Called for each event
+
+  if (!fAOD) 
+    {
+      Printf("ERROR: fAOD not available");
+      return;
+    }
+
+  AliCentrality *central;
+  central = fAOD->GetCentrality();
+  if(!central)
+    {
+      cout << "ERROR: centrality not available" << endl;
+      return;
+    }
+  double cPer = central->GetCentralityPercentile("TRK");
+  fHistCent->Fill(cPer);
+  //PostData(0, fHistList);
+  //cout << cPer << "\t";
+  //return;
+  
+  Printf("There are %d tracks in this event", fAOD->GetNumberOfTracks());
+  Printf("There are %d clusters in this event", fAOD->GetNumberOfCaloClusters());
+
+  double del_Eta = 0;
+
+  for(int i = 0; i < fAOD->GetNumberOfTracks(); i++)
+    {
+      AliAODTrack* iTrack = static_cast<AliAODTrack*>(fAOD->GetTrack(i));
+      
+      if (!iTrack) 
+	{
+	  Printf("ERROR: Could not receive iTrack %d", i);
+	  continue;
+	}
+      double iPt = iTrack->Pt(); 
+      double iPhi = iTrack->Phi(); //cout << "iPhi: " << iPhi << endl;
+      double iEta = iTrack->Eta();
+
+      fHistPt->Fill(iPt);
+      fHistPhi->Fill(iPhi);
+      fHistEta->Fill(iEta);
+      if(iPt < 5)//leading track cut
+	continue;
+
+      fHistPt2->Fill(iPt);
+      fHistPhi2->Fill(iPhi);
+      fHistEta2->Fill(iEta);
+      
+      for(int j = i+1;j < fAOD->GetNumberOfTracks(); j++)	
+	{
+	  if(i == j)
+	    continue;
+	  
+	  AliAODTrack* jTrack = static_cast<AliAODTrack*>(fAOD->GetTrack(j));
+	  if ((!jTrack)) 
+	    {
+	      Printf("ERROR: Could not receive jTrack %d", j);
+	      continue;
+	    }
+
+	  double jPt = jTrack->Pt();
+	  double jPhi = jTrack->Phi();
+	  double jEta = jTrack->Eta();
+
+	  if(jPt < 2)//associated track cut
+	    continue;
+
+	  //double del_Pt = TMath::Abs(iPt-jPt)
+	  double phiMax = 0;
+	  double phiMin = 0;
+	  double del_Phi = 0;
+
+	  if(iPhi > jPhi)
+	    {
+	      phiMax = iPhi;
+	      phiMin = jPhi;
+	    }
+	  else
+	    {
+	      phiMax = jPhi;
+	      phiMin = iPhi;
+	    }
+	  if((phiMax-phiMin) > TMath::Pi())
+	    {
+	      del_Phi = phiMin-(phiMax-2*(TMath::Pi()));
+	    }
+	  else
+	    {
+	      del_Phi = phiMax - phiMin;
+	    }
+	  if(del_Phi > TMath::Pi())
+	    cout << __FILE__ << __LINE__ << "~~~~~~~~~~~~~~~~~~~FLAG~~~~~~~~~~~~~~~~~~~`" <<  endl;
+	  //cout << iPhi*180/(TMath::Pi()) << "\t" << jPhi*180/(TMath::Pi()) << "\t" << phiMax*180/(TMath::Pi()) << "\t" << phiMin*180/(TMath::Pi()) << "\t" << del_Phi*180/(TMath::Pi()) << endl;
+	  del_Eta = 0;
+	  del_Eta = iEta-jEta;
+	  
+	  //Filling the eta corr hists
+	  fHistDelPhi->Fill((del_Phi), (del_Eta));
+	  if(cPer <= 10 && cPer >= 0)
+	    fHistDelPhi_10->Fill((del_Phi), (del_Eta));
+	  if(cPer <= 40 && cPer >= 20)
+	    fHistDelPhi_40->Fill((del_Phi), (del_Eta));
+	  //fHistDelPt->Fill(del_Pt, del_Eta);
+	}//j loop
+    }//i loop
+
+  //Calo Clusters loop to fill the E spectrum
+  for(int  i = 0; i < fAOD->GetNumberOfCaloClusters(); i++)
+    {
+      AliAODCaloCluster* iCluster = static_cast<AliAODCaloCluster*>(fAOD->GetCaloCluster(i));
+      if (!iCluster) 
+	{
+	  Printf("ERROR: Could not receive cluster %d", i);
+	  continue;
+	}
+      if(!(iCluster->IsEMCAL()))
+	continue;
+      
+      double iE = iCluster->E();
+      fHistE->Fill(iE);
+      
+      if(iE < 5)//leading cluster cut
+	continue;
+      
+      fHistE2->Fill(iE);
+
+      for(int j = i+1;j < fAOD->GetNumberOfCaloClusters(); j++)
+	{
+	  AliAODCaloCluster* jCluster = static_cast<AliAODCaloCluster*>(fAOD->GetCaloCluster(j));
+	  if (!jCluster) 
+	    {
+	      Printf("ERROR: Could not receive cluster %d", j);
+	      continue;
+	    }
+	  if(!(jCluster->IsEMCAL()))
+	    continue;
+
+	  double jE = jCluster->E();
+	  if(jE < 2)
+	    continue;
+
+	  double del_E = TMath::Abs(iE - jE);
+
+	  fHistDelE->Fill(del_E, del_Eta);
+	  if(cPer <= 10 && cPer >= 0)
+	    fHistDelE_10->Fill((del_E), (del_Eta));
+	  if(cPer <= 40 && cPer >= 20)
+	    fHistDelE_40->Fill((del_E), (del_Eta));
+	}// j loop
+      
+    }// i loop
+  
+  // Post output data.
+  PostData(0, fHistList);
+}      
+
+//________________________________________________________________________
+void AliAnalysisTaskPtCuts::Terminate(Option_t *) 
+{
+  // Draw result to the screen
+  // Called once at the end of the query
+  
+  //Hist List
+  fHistList = static_cast<TList*> (GetOutputData(0));
+  if (!fHistList) 
+    {
+      Printf("ERROR: fHistList not available");
+      return;
+    }
+  TCanvas *cCent = new TCanvas("cCent","Cent",500,500);
+  fHistCent = static_cast<TH1F*>(fHistList->FindObject("fHistCent")); 
+  if (fHistCent)
+    {
+      cCent->cd(1)->SetLogy();
+      fHistCent->Draw("E");
+    }
+  else
+    Printf("ERROR: fHistCent not available");
+  
+  //Pt hist
+  TCanvas *cPt = new TCanvas("cPt","Pt",1000,500);
+  cPt->Divide(2,1);
+  fHistPt = static_cast<TH1F*>(fHistList->FindObject("fHistPt"));
+  fHistPt2 = static_cast<TH1F*>(fHistList->FindObject("fHistPt2"));
+  
+  if (fHistPt)
+    {
+      cPt->cd(1)->SetLogy();
+      fHistPt->Draw("E");
+    }
+  else
+    Printf("ERROR: fHistPt not available");
+  
+  if (fHistPt2)
+    {
+      cPt->cd(2)->SetLogy();
+      fHistPt2->Draw("E");
+    }
+  else
+    Printf("ERROR: fHistPt2 not available");
+  
+  //E hist
+  TCanvas *cE = new TCanvas("cE","E",1000,500);
+  cE->Divide(2,1);
+  fHistE = static_cast<TH1F*>(fHistList->FindObject("fHistE"));
+  fHistE2 = static_cast<TH1F*>(fHistList->FindObject("fHistE2"));
+  
+  if (fHistE)
+    {
+      cE->cd(1)->SetLogy();
+      fHistE->Draw("E");
+    }
+  else
+    Printf("ERROR: fHistE not available");
+  
+  if (fHistE2)
+    {
+      cE->cd(2)->SetLogy();
+      fHistE2->Draw("E");
+    }
+  else
+    Printf("ERROR: fHistE2 not available");
+  
+  //Phi hist
+  TCanvas *cPhi = new TCanvas("cPhi","Phi",1000,500);
+  cPhi->Divide(2,1);
+  fHistPhi = static_cast<TH1F*>(fHistList->FindObject("fHistPhi"));
+  fHistPhi2 = static_cast<TH1F*>(fHistList->FindObject("fHistPhi2"));
+  
+  if (fHistPhi)
+    {
+      cPhi->cd(1)->SetLogy();
+      fHistPhi->Draw("E");
+    }
+  else
+    Printf("ERROR: fHistPhi not available");
+  
+  if (fHistPhi2)
+    {
+      cPhi->cd(2)->SetLogy();
+      fHistPhi2->Draw("E");
+    }
+  else
+    Printf("ERROR: fHistPhi2 not available");
+
+  //Eta hist
+  TCanvas *cEta = new TCanvas("cEta","Eta",1000,500);
+  cEta->Divide(2,1);
+  fHistEta = static_cast<TH1F*>(fHistList->FindObject("fHistEta"));
+  fHistEta2 = static_cast<TH1F*>(fHistList->FindObject("fHistEta2"));
+  
+  if (fHistEta)
+    {
+      cEta->cd(1)->SetLogy();
+      fHistEta->Draw("E");
+    }
+  else
+    Printf("ERROR: fHistEta not available");
+  
+  if (fHistEta2)
+    {
+      cEta->cd(2)->SetLogy();
+      fHistEta2->Draw("E");
+    }
+  else
+    Printf("ERROR: fHistEta2 not available");
+
+  //Corr hist
+  TCanvas *cCorr = new TCanvas("cCorr","Eta correlations",1000,1500);
+  cCorr->Divide(2,3);
+  //fHistDelPt   = static_cast<TH2F*>(fHistList->FindObject("fHistDelPt"    ));
+  fHistDelE      = static_cast<TH2F*>(fHistList->FindObject("fHistDelE"     ));
+  fHistDelPhi    = static_cast<TH2F*>(fHistList->FindObject("fHistDelPhi"   ));
+  fHistDelE_10   = static_cast<TH2F*>(fHistList->FindObject("fHistDelE_10"  ));
+  fHistDelPhi_10 = static_cast<TH2F*>(fHistList->FindObject("fHistDelPhi_10"));
+  fHistDelE_40   = static_cast<TH2F*>(fHistList->FindObject("fHistDelE_40"  ));
+  fHistDelPhi_40 = static_cast<TH2F*>(fHistList->FindObject("fHistDelPhi_40"));
+
+  /*if (fHistDelPt)
+    {
+      cCorr->cd(1)->SetLogz();
+      fHistDelPt->Draw("colz");
+    }
+  else
+  Printf("ERROR: fHistDelPt not available");*/
+
+  if (fHistDelE)
+    {
+      cCorr->cd(1);//->SetLogz();
+      fHistDelE->Draw("colz");
+    }
+  else
+    Printf("ERROR: fHistDelE not available");
+  
+  if (fHistDelPhi)
+    {
+      cCorr->cd(2);//->SetLogz();
+      fHistDelPhi->Draw("surf1");
+    }
+  else
+    Printf("ERROR: fHistDelPhi not available");
+
+  if (fHistDelE_10)
+    {
+      cCorr->cd(3);//->SetLogz();
+      fHistDelE_10->Draw("colz");
+    }
+  else
+    Printf("ERROR: fHistDelE_10 not available");
+  
+  if (fHistDelPhi_10)
+    {
+      cCorr->cd(4);//->SetLogz();
+      fHistDelPhi_10->Draw("surf1");
+    }
+  else
+    Printf("ERROR: fHistDelPhi_10 not available");
+
+  if (fHistDelE_40)
+    {
+      cCorr->cd(5);//->SetLogz();
+      fHistDelE_40->Draw("colz");
+    }
+  else
+    Printf("ERROR: fHistDelE_40 not available");
+  
+  if (fHistDelPhi_40)
+    {
+      cCorr->cd(6);//->SetLogz();
+      fHistDelPhi_40->Draw("surf1");
+    }
+  else
+    Printf("ERROR: fHistDelPhi_40 not available");
+
+
+}
+
+
+
+
+
+
+
+
+
+
